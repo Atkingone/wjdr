@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>无尽冬日 · 战力分析</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.3/dist/tesseract.min.js"></script>
+<style>
+  :root{
+    --bg:#0a1628; --card:#12233d; --card2:#0e1c32; --line:#24405f;
+    --ice:#38bdf8; --ice2:#7dd3fc; --text:#e8f1f8; --muted:#8fa8bf;
+    --atk:#ff9f43; --pen:#ff6b6b; --def:#4dd0a0; --hp:#6aa6ff;
+    --warn:#ffd166; --good:#4dd0a0;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    padding-bottom:60px; font-size:15px;
+  }
+  .hidden{display:none !important;}
+  .page{max-width:640px; margin:0 auto; padding:12px;}
+
+  /* 首页 */
+  #home{min-height:100vh; display:flex; flex-direction:column; justify-content:center; gap:24px;}
+  .logo{text-align:center;}
+  .logo h1{font-size:26px; margin:0; letter-spacing:2px;}
+  .logo p{color:var(--muted); margin:8px 0 0;}
+  .entry{
+    display:block; width:100%; padding:20px; border-radius:16px; border:1px solid var(--line);
+    background:var(--card); color:var(--text); font-size:18px; text-align:left; cursor:pointer;
+    margin-bottom:14px; transition:.15s;
+  }
+  .entry:active{transform:scale(.98);}
+  .entry b{display:block; font-size:20px; margin-bottom:4px;}
+  .entry span{color:var(--muted); font-size:13px;}
+
+  /* 顶栏 */
+  .topbar{display:flex; align-items:center; gap:10px; margin-bottom:12px; position:sticky; top:0; background:var(--bg); z-index:5; padding:8px 0;}
+  .topbar .title{font-size:17px; font-weight:700; flex:1;}
+  .btn{
+    background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:10px;
+    padding:10px 14px; font-size:14px; cursor:pointer;
+  }
+  .btn:active{transform:scale(.96);}
+  .btn.primary{background:var(--ice); color:#042030; border-color:var(--ice); font-weight:700;}
+  .seg{display:flex; background:var(--card2); border:1px solid var(--line); border-radius:12px; padding:3px; margin-bottom:12px;}
+  .seg button{flex:1; background:transparent; border:none; color:var(--muted); padding:10px; border-radius:9px; font-size:14px; cursor:pointer;}
+  .seg button.on{background:var(--ice); color:#042030; font-weight:700;}
+
+  /* 卡片 */
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px;}
+  .card h3{margin:0 0 12px; font-size:16px; display:flex; align-items:center; gap:6px;}
+  .troop-tag{display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:8px; font-size:14px; font-weight:700;}
+  .tag-shield{background:#5b6b7a; color:#fff;}
+  .tag-spear{background:#7a5b8a; color:#fff;}
+  .tag-bow{background:#8a6b4d; color:#fff;}
+
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .field label{display:block; font-size:12px; color:var(--muted); margin-bottom:5px;}
+  .field input{
+    width:100%; padding:12px 10px; border-radius:10px; border:1px solid var(--line);
+    background:var(--card2); color:var(--text); font-size:16px; text-align:center;
+  }
+  .field input:focus{outline:none; border-color:var(--ice);}
+  .field input.active{outline:2px solid var(--warn); border-color:var(--warn);}
+  .field .c-atk label{color:var(--atk);} .field .c-pen label{color:var(--pen);}
+  .field .c-def label{color:var(--def);} .field .c-hp label{color:var(--hp);}
+
+  .section-label{font-size:12px; color:var(--muted); margin:14px 0 8px; letter-spacing:1px;}
+
+  /* 结果 */
+  .result-row{display:flex; justify-content:space-between; align-items:center; padding:9px 2px; border-bottom:1px dashed var(--line);}
+  .result-row:last-child{border-bottom:none;}
+  .result-row .k{color:var(--muted); font-size:13px;}
+  .result-row .v{font-size:16px; font-weight:700; text-align:right; word-break:break-all;}
+  .v.atk{color:var(--atk);} .v.pen{color:var(--pen);} .v.def{color:var(--def);} .v.hp{color:var(--hp);} .v.ice{color:var(--ice2);}
+  .advice{margin-top:10px; padding:10px 12px; border-radius:10px; background:var(--card2); font-size:13px; line-height:1.6;}
+  .advice .good{color:var(--good);} .advice .warn{color:var(--warn);}
+  .vs-badge{font-size:12px; padding:2px 8px; border-radius:6px; margin-left:6px;}
+  .vs-win{background:rgba(77,208,160,.2); color:var(--good);}
+  .vs-lose{background:rgba(255,107,107,.2); color:var(--pen);}
+
+  /* 总览 */
+  .overview{background:linear-gradient(160deg,#132c4d,#0e1c32); border:1px solid var(--ice); border-radius:16px; padding:16px; margin-top:16px;}
+  .overview h3{margin:0 0 12px; color:var(--ice2);}
+  .big{display:flex; gap:12px;}
+  .big .box{flex:1; background:rgba(0,0,0,.25); border-radius:12px; padding:12px; text-align:center;}
+  .big .box .num{font-size:22px; font-weight:800; margin-top:4px;}
+  .conclusion{margin-top:12px; font-size:13px; color:var(--muted); line-height:1.7;}
+
+  /* OCR */
+  .ocr-zone .drop{
+    border:2px dashed var(--line); border-radius:14px; padding:18px; text-align:center; color:var(--muted);
+    cursor:pointer; background:var(--card2); font-size:14px;
+  }
+  .ocr-zone img{max-width:100%; border-radius:12px; margin-top:10px; display:none;}
+  .ocr-actions{display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;}
+  .progress{height:8px; background:var(--card2); border-radius:6px; overflow:hidden; margin-top:10px; display:none;}
+  .progress div{height:100%; width:0; background:var(--ice); transition:width .2s;}
+  .chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
+  .chip{
+    background:var(--card2); border:1px solid var(--line); color:var(--ice2); border-radius:8px;
+    padding:8px 12px; font-size:16px; font-weight:700; cursor:pointer;
+  }
+  .chip:active{background:var(--ice); color:#042030;}
+  .toast{
+    position:fixed; left:50%; bottom:80px; transform:translateX(-50%); background:#1e3a5f;
+    color:var(--text); padding:10px 18px; border-radius:20px; font-size:14px; z-index:99; opacity:0;
+    transition:opacity .25s; pointer-events:none; border:1px solid var(--line);
+  }
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div id="home" class="page">
+  <div class="logo">
+    <h1>无尽冬日 · 战力分析</h1>
+    <p>攻击 × 穿透 ｜ 防御 × 生命 ｜ 均衡短板</p>
+  </div>
+  <button class="entry" onclick="openTool('self')">
+    <b>分析自己</b><span>只填我方属性，看进攻/防守值与短板</span>
+  </button>
+  <button class="entry" onclick="openTool('compare')">
+    <b>双方对比</b><span>我方 vs 敌方，找出差距在哪一项</span>
+  </button>
+</div>
+
+<div id="main" class="page hidden">
+  <div class="topbar">
+    <button class="btn" onclick="goHome()">‹ 返回</button>
+    <div class="title" id="mainTitle"></div>
+    <button class="btn" onclick="resetAll()">重置</button>
+  </div>
+
+  <div class="card ocr-zone">
+    <h3>📄 战报截图识别（可选）</h3>
+    <div class="drop" onclick="document.getElementById('file').click()">点击上传战报截图，识别数字后点选填入</div>
+    <input type="file" id="file" accept="image/*" class="hidden" onchange="onFile(this)">
+    <img id="preview">
+    <div class="ocr-actions">
+      <button class="btn primary" id="ocrBtn" onclick="runOCR()" disabled>识别文字</button>
+      <button class="btn" onclick="clearOCR()">清除图片</button>
+    </div>
+    <div class="progress" id="progWrap"><div id="prog"></div></div>
+    <div id="ocrHint" style="font-size:12px;color:var(--muted);margin-top:8px;"></div>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <div class="seg hidden" id="sideSeg">
+    <button id="sideSelf" class="on" onclick="setSide('self')">我方</button>
+    <button id="sideEnemy" onclick="setSide('enemy')">敌方</button>
+  </div>
+
+  <div id="troops"></div>
+
+  <div class="overview" id="overview"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ 常量与状态 ============ */
+const TROOPS = [
+  {key:'shield', name:'盾兵', cls:'tag-shield', tag:'盾'},
+  {key:'spear',  name:'矛兵', cls:'tag-spear',  tag:'矛'},
+  {key:'bow',    name:'弓兵', cls:'tag-bow',    tag:'弓'},
+];
+const FIELDS = [
+  {key:'attack', label:'攻击', cls:'c-atk', hint:'A'},
+  {key:'pen',    label:'穿透', cls:'c-pen', hint:'B'},
+  {key:'def',    label:'防御', cls:'c-def', hint:'C'},
+  {key:'hp',     label:'生命', cls:'c-hp',  hint:'D'},
+];
+const BONUS = [
+  {key:'atkBonus', label:'攻击加成%'},
+  {key:'penBonus', label:'穿透加成%'},
+  {key:'defBonus', label:'防御加成%'},
+  {key:'hpBonus',  label:'生命加成%'},
+];
+
+const SAVE_KEY = 'wjdr_analyzer_v1';
+function emptyTroop(){ return {attack:'',pen:'',def:'',hp:'',atkBonus:'',penBonus:'',defBonus:'',hpBonus:''}; }
+function emptySide(){ const o={}; TROOPS.forEach(t=>o[t.key]=emptyTroop()); return o; }
+
+let state = {
+  mode:'self',
+  activeSide:'self',
+  sides:{ self:emptySide(), enemy:emptySide() }
+};
+let activeInput = null;
+
+/* ============ 工具函数 ============ */
+function num(v){ const n=parseFloat(v); return isNaN(n)?0:n; }
+function fmt(v){ return Number(v).toLocaleString('zh-CN',{maximumFractionDigits:0}); }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1800); }
+
+function load(){
+  try{ const s=localStorage.getItem(SAVE_KEY); if(s){ const p=JSON.parse(s); if(p&&p.sides) state=p; } }catch(e){}
+}
+function save(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(state)); }catch(e){} }
+
+/* ============ 计算 ============ */
+function calcTroop(t){
+  const A=num(t.attack), B=num(t.pen), C=num(t.def), D=num(t.hp);
+  const ab=num(t.atkBonus), pb=num(t.penBonus), db=num(t.defBonus), hb=num(t.hpBonus);
+  const atkGain = (1+ab/100)*(1+pb/100);   // 进攻增益
+  const defGain = (1+db/100)*(1+hb/100);   // 防守增益
+  const atkVal  = A*B*atkGain;             // 进攻值
+  const defVal  = C*D*defGain;             // 防守值
+  return {A,B,C,D,atkGain,defGain,atkVal,defVal};
+}
+function balance(a,b,aL,bL){
+  if(!a||!b) return '填写数值后给出建议';
+  const hi=Math.max(a,b), lo=Math.min(a,b);
+  if(hi/lo < 1.1) return '<span class="good">'+aL+'与'+bL+'均衡，乘积接近最优 ✔</span>';
+  const low = a<b?bL:aL;
+  const diff = Math.round((hi-lo)/lo*100);
+  return '<span class="warn">'+low+'偏低（约低 '+diff+'%），优先补'+low+'收益更大</span>';
+}
+
+/* ============ 渲染 ============ */
+function openTool(mode){
+  state.mode=mode;
+  document.getElementById('home').classList.add('hidden');
+  document.getElementById('main').classList.remove('hidden');
+  document.getElementById('mainTitle').textContent = mode==='self' ? '分析自己' : '双方对比';
+  document.getElementById('sideSeg').classList.toggle('hidden', mode!=='compare');
+  renderTroops(); renderOverview();
+}
+
+function goHome(){
+  document.getElementById('main').classList.add('hidden');
+  document.getElementById('home').classList.remove('hidden');
+  save();
+}
+
+function setSide(side){
+  state.activeSide=side;
+  document.getElementById('sideSelf').classList.toggle('on', side==='self');
+  document.getElementById('sideEnemy').classList.toggle('on', side==='enemy');
+  activeInput=null;
+  renderTroops(); renderOverview();
+}
+
+function renderTroops(){
+  const host=document.getElementById('troops'); host.innerHTML='';
+  const sides = state.mode==='self' ? ['self'] : [state.activeSide];
+  const sideName = s=> s==='self' ? '我方' : '敌方';
+
+  sides.forEach(s=>{
+    TROOPS.forEach(tr=>{
+      const data = state.sides[s][tr.key];
+      const card=document.createElement('div'); card.className='card';
+      let h = '<h3><span class="troop-tag '+tr.cls+'">'+tr.tag+'</span>'+tr.name;
+      if(state.mode==='compare') h += '<span class="vs-badge vs-'+s+'">'+sideName(s)+'</span>';
+      h += '</h3><div class="grid">';
+      FIELDS.forEach(f=>{
+        h += '<div class="field"><label class="'+f.cls+'">'+f.label+'（'+f.hint+'）</label>'+
+             '<input type="number" inputmode="decimal" step="any" data-side="'+s+'" data-troop="'+tr.key+'" data-key="'+f.key+'" value="'+esc(data[f.key])+'"></div>';
+      });
+      h += '</div><div class="section-label">加成（不带 %，如 25 表示 25%）</div><div class="grid">';
+      BONUS.forEach(b=>{
+        h += '<div class="field"><label>'+b.label+'</label>'+
+             '<input type="number" inputmode="decimal" step="any" data-side="'+s+'" data-troop="'+tr.key+'" data-key="'+b.key+'" value="'+esc(data[b.key])+'"></div>';
+      });
+      h += '</div>';
+      card.innerHTML=h;
+      host.appendChild(card);
+      // 结果卡片紧跟本兵种
+      const res=document.createElement('div'); res.className='card'; res.id='result-'+s+'-'+tr.key;
+      host.appendChild(res);
+    });
+  });
+  bindInputs();
+  sides.forEach(s=>TROOPS.forEach(tr=>updateResult(s,tr.key)));
+  renderOverview();
+}
+
+function updateResult(s, tkey){
+  const el=document.getElementById('result-'+s+'-'+tkey);
+  if(!el) return;
+  const tr=TROOPS.find(x=>x.key===tkey);
+  const r=calcTroop(state.sides[s][tkey]);
+  el.innerHTML =
+    '<h3>'+tr.name+' · 结果</h3>'+
+    '<div class="result-row"><span class="k">进攻增益</span><span class="v ice">× '+r.atkGain.toFixed(3)+'</span></div>'+
+    '<div class="result-row"><span class="k">防守增益</span><span class="v ice">× '+r.defGain.toFixed(3)+'</span></div>'+
+    '<div class="result-row"><span class="k">进攻值（A×B×增益）</span><span class="v atk">'+fmt(r.atkVal)+'</span></div>'+
+    '<div class="result-row"><span class="k">防守值（C×D×增益）</span><span class="v def">'+fmt(r.defVal)+'</span></div>'+
+    '<div class="advice">'+balance(r.A,r.B,'攻击','穿透')+'<br>'+balance(r.C,r.D,'防御','生命')+'</div>';
+}
+
+function renderOverview(){
+  const ov=document.getElementById('overview');
+  const self=totals('self');
+  if(state.mode==='self'){
+    ov.innerHTML='<h3>总览</h3><div class="big">'+
+      '<div class="box"><div class="k" style="color:var(--muted);font-size:12px;">总进攻值</div><div class="num" style="color:var(--atk);">'+fmt(self.atk)+'</div></div>'+
+      '<div class="box"><div class="k" style="color:var(--muted);font-size:12px;">总防守值</div><div class="num" style="color:var(--def);">'+fmt(self.def)+'</div></div>'+
+      '</div>'+overviewConclusion(self,null);
+  }else{
+    const en=totals('enemy');
+    const ratioAtk = self.atk && en.atk ? (self.atk/en.atk).toFixed(2) : '—';
+    const ratioDef = self.def && en.def ? (self.def/en.def).toFixed(2) : '—';
+    ov.innerHTML='<h3>总览 · 我方 vs 敌方</h3><div class="big">'+
+      '<div class="box"><div class="k" style="color:var(--muted);font-size:12px;">进攻值 我/敌</div><div class="num" style="color:var(--atk);">'+ratioAtk+'</div></div>'+
+      '<div class="box"><div class="k" style="color:var(--muted);font-size:12px;">防守值 我/敌</div><div class="num" style="color:var(--def);">'+ratioDef+'</div></div>'+
+      '</div>'+overviewConclusion(self,en);
+  }
+}
+
+function totals(side){
+  let atk=0, def=0;
+  TROOPS.forEach(t=>{ const r=calcTroop(state.sides[side][t.key]); atk+=r.atkVal; def+=r.defVal; });
+  return {atk,def};
+}
+
+function overviewConclusion(self,en){
+  let html='<div class="conclusion">';
+  const weakest=[];
+  TROOPS.forEach(t=>{
+    const r=calcTroop(state.sides.self[t.key]);
+    if(r.A&&r.B){
+      const ratio=Math.max(r.A,r.B)/Math.min(r.A,r.B);
+      if(ratio>=1.2) weakest.push(t.name+'(攻击'+Math.round(r.A)+'/穿透'+Math.round(r.B)+' 失衡)');
+    }
+    if(r.C&&r.D){
+      const ratio=Math.max(r.C,r.D)/Math.min(r.C,r.D);
+      if(ratio>=1.2) weakest.push(t.name+'(防御'+Math.round(r.C)+'/生命'+Math.round(r.D)+' 失衡)');
+    }
+  });
+  if(weakest.length) html+='<b>短板提示：</b>'+weakest.join('；')+'。';
+  if(en){
+    const dAtk=self.atk-en.atk, dDef=self.def-en.def;
+    if(self.atk&&en.atk) html+='<br><b>进攻对比：</b>你'+(dAtk>=0?'高':'低')+'对方 '+fmt(Math.abs(dAtk))+'（'+(self.atk/en.atk).toFixed(2)+' 倍）。';
+    if(self.def&&en.def) html+='<br><b>防守对比：</b>你'+(dDef>=0?'高':'低')+'对方 '+fmt(Math.abs(dDef))+'（'+(self.def/en.def).toFixed(2)+' 倍）。';
+  }
+  html+='</div>';
+  return html;
+}
+
+/* ============ 输入绑定 ============ */
+function bindInputs(){
+  document.querySelectorAll('#troops input').forEach(inp=>{
+    inp.addEventListener('focus',()=>{
+      document.querySelectorAll('#troops input.active').forEach(x=>x.classList.remove('active'));
+      inp.classList.add('active'); activeInput=inp;
+    });
+    inp.addEventListener('input',()=>{
+      const s=inp.dataset.side, t=inp.dataset.troop, k=inp.dataset.key;
+      state.sides[s][t][k]=inp.value; save();
+      updateResult(s,t); renderOverview();
+    });
+  });
+}
+
+/* ============ 重置 ============ */
+function resetAll(){
+  if(!confirm('确定清空所有已填数据？')) return;
+  state.sides={ self:emptySide(), enemy:emptySide() };
+  activeInput=null; save(); renderTroops(); renderOverview(); toast('已清空');
+}
+
+/* ============ OCR ============ */
+let ocrFile=null, ocrText='';
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function onFile(input){
+  const f=input.files[0]; if(!f) return;
+  ocrFile=f;
+  const img=document.getElementById('preview');
+  img.src=URL.createObjectURL(f); img.style.display='block';
+  document.getElementById('ocrBtn').disabled=false;
+  document.getElementById('ocrHint').textContent='已载入，点击「识别文字」开始';
+  document.getElementById('chips').innerHTML='';
+}
+
+function clearOCR(){
+  ocrFile=null; ocrText='';
+  document.getElementById('preview').style.display='none';
+  document.getElementById('preview').src='';
+  document.getElementById('ocrBtn').disabled=true;
+  document.getElementById('chips').innerHTML='';
+  document.getElementById('progWrap').style.display='none';
+  document.getElementById('ocrHint').textContent='';
+  document.getElementById('file').value='';
+}
+
+async function runOCR(){
+  if(!ocrFile) return;
+  if(typeof Tesseract==='undefined'){ toast('识别库未加载，请联网后刷新'); return; }
+  const btn=document.getElementById('ocrBtn'); btn.disabled=true; btn.textContent='识别中…';
+  const prog=document.getElementById('prog'); const wrap=document.getElementById('progWrap');
+  wrap.style.display='block'; prog.style.width='0';
+  document.getElementById('ocrHint').textContent='首次识别需下载语言包（约 20MB），请耐心等待…';
+  try{
+    const {data}=await Tesseract.recognize(ocrFile, 'chi_sim+eng', {
+      logger:m=>{ if(m.status==='recognizing text'){ prog.style.width=Math.round(m.progress*100)+'%'; } }
+    });
+    ocrText=data.text||'';
+    prog.style.width='100%';
+    document.getElementById('ocrHint').textContent='识别完成。点击下方数字，先选中一个输入框再点数字填入。';
+    renderChips();
+  }catch(e){
+    document.getElementById('ocrHint').textContent='识别失败：'+e.message;
+  }finally{
+    btn.disabled=false; btn.textContent='识别文字';
+  }
+}
+
+function extractNumbers(text){
+  const out=[]; const re=/(\d[\d,]*\.?\d*)\s*(%)?/g; let m;
+  while((m=re.exec(text))!==null){
+    const v=m[1].replace(/,/g,'');
+    if(v.length<=10) out.push({value:v, pct:!!m[2]});
+  }
+  return out;
+}
+
+function renderChips(){
+  const host=document.getElementById('chips'); host.innerHTML='';
+  const nums=extractNumbers(ocrText);
+  if(!nums.length){ host.innerHTML='<span style="color:var(--muted);font-size:13px;">未识别到数字，可手动填写输入框</span>'; return; }
+  nums.forEach((n,i)=>{
+    const c=document.createElement('span'); c.className='chip';
+    c.textContent=n.value+(n.pct?'%':'');
+    c.onclick=()=>{
+      if(!activeInput){ toast('请先点击一个要填入的输入框'); return; }
+      activeInput.value=n.value;
+      activeInput.dispatchEvent(new Event('input'));
+      toast('已填入 '+n.value);
+    };
+    host.appendChild(c);
+  });
+}
+
+/* ============ 启动 ============ */
+load();
+</script>
+</body>
+</html>
