@@ -393,18 +393,35 @@ async function runOCR(){
   const btn=document.getElementById('ocrBtn'); btn.disabled=true; btn.textContent='识别中…';
   const prog=document.getElementById('prog'); const wrap=document.getElementById('progWrap');
   wrap.style.display='block'; prog.style.width='0';
-  document.getElementById('ocrHint').textContent='首次识别需下载语言包（约 20MB），请耐心等待…';
+  const hint=document.getElementById('ocrHint');
+  const STAGES={
+    'loading tesseract core':'加载识别核心',
+    'initializing tesseract':'初始化引擎',
+    'loading language traineddata':'下载语言包（约11MB，仅首次，之后有缓存）',
+    'initializing api':'准备识别',
+    'recognizing text':'识别数字中'
+  };
+  let worker=null;
   try{
-    const {data}=await Tesseract.recognize(ocrFile, 'chi_sim+eng', {
-      logger:m=>{ if(m.status==='recognizing text'){ prog.style.width=Math.round(m.progress*100)+'%'; } }
+    worker=await Tesseract.createWorker('eng', 1, {
+      langPath:'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0',
+      logger:m=>{
+        const label=STAGES[m.status]||m.status;
+        const pct=Math.round((m.progress||0)*100);
+        hint.textContent=label+' '+pct+'%';
+        prog.style.width=pct+'%';
+      }
     });
+    await worker.setParameters({ tessedit_char_whitelist:'0123456789.,% ' });
+    const {data}=await worker.recognize(ocrFile);
     ocrText=data.text||'';
     prog.style.width='100%';
-    document.getElementById('ocrHint').textContent='识别完成。点击下方数字，先选中一个输入框再点数字填入。';
+    hint.textContent='识别完成（数字模式）。先点一个输入框，再点下方数字填入。';
     renderChips();
   }catch(e){
-    document.getElementById('ocrHint').textContent='识别失败：'+e.message;
+    hint.textContent='识别失败：'+(e.message||e)+'。可直接手动填写输入框。';
   }finally{
+    if(worker){ try{ await worker.terminate(); }catch(e){} }
     btn.disabled=false; btn.textContent='识别文字';
   }
 }
