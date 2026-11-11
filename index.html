@@ -127,6 +127,7 @@
   <div class="logo">
     <h1>无尽冬日 · 战力分析</h1>
     <p>攻击 × 穿透 ｜ 防御 × 生命 ｜ 均衡短板</p>
+    <p style="color:var(--muted);font-size:12px;opacity:.65;">版本 v2.3</p>
   </div>
   <button class="entry" onclick="openTool('self')">
     <b>分析自己</b><span>传战报截图自动填加成，看增益与短板</span>
@@ -500,6 +501,8 @@ function autoFillFromTsv(tsv){
   const rows=extractBonusRows(parseTsvWords(tsv));
   /* 硬校验：必须恰好识别出 12 行加成才自动填，防止错位 */
   if(rows.length!==FIELD_ORDER.length) return {filled:0, found:rows.length};
+  /* 清空旧加成，避免上次数据残留干扰 */
+  FIELD_ORDER.forEach(([tr,f])=>{ state.sides.self[tr][f]=''; state.sides.enemy[tr][f]=''; });
   for(let i=0;i<rows.length;i++){
     const [tr,f]=FIELD_ORDER[i];
     if(rows[i].left!=null) state.sides.self[tr][f]=String(rows[i].left);
