@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>无尽冬日 · 战力分析</title>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.3/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <style>
   :root{
     --bg:#0a1628; --card:#12233d; --card2:#0e1c32; --line:#24405f;
@@ -410,16 +410,16 @@ async function runOCR(){
         const pct=Math.round((m.progress||0)*100);
         hint.textContent=label+' '+pct+'%';
         prog.style.width=pct+'%';
-      }
+      },
+      errorHandler:e=>{ hint.textContent='引擎警告：'+(e.message||e); }
     });
-    await worker.setParameters({ tessedit_char_whitelist:'0123456789.,% ' });
     const {data}=await worker.recognize(ocrFile);
     ocrText=data.text||'';
     prog.style.width='100%';
     hint.textContent='识别完成（数字模式）。先点一个输入框，再点下方数字填入。';
     renderChips();
   }catch(e){
-    hint.textContent='识别失败：'+(e.message||e)+'。可直接手动填写输入框。';
+    hint.textContent='识别失败：'+(e.message||e)+'。可手动填写；如反复失败，请用系统浏览器（Chrome/Safari）打开本页再试。';
   }finally{
     if(worker){ try{ await worker.terminate(); }catch(e){} }
     btn.disabled=false; btn.textContent='识别文字';
