@@ -432,11 +432,13 @@ async function runOCR(){
     const {data}=await worker.recognize(ocrFile, {}, {text:true, tsv:true});
     ocrText=data.text||'';
     prog.style.width='100%';
-    const filled=autoFillFromTsv(data.tsv);
-    if(filled>0){
-      hint.textContent='识别完成，已自动填入 '+filled+'/12 项加成'+(filled<12?'（缺的手动补一下）':'')+'。明细已展开，请核对数字是否识别正确。';
+    const res=autoFillFromTsv(data.tsv);
+    if(res.filled>0){
+      hint.textContent='识别完成，已自动填入 12 项加成。明细已展开，请核对数字是否识别正确（错了直接改，结果实时刷新）。';
+    }else if(res.found>0){
+      hint.textContent='识别到 '+res.found+' 行加成（期望 12 行），为避免错位没有自动填入。请展开明细手动填写，或换一张更清晰的截图重试。';
     }else{
-      hint.textContent='识别完成，但未识别到加成数字。可点下方数字填入，或展开明细手动填写。';
+      hint.textContent='识别完成，但未识别到加成行。可点下方数字填入，或展开明细手动填写。';
     }
     renderChips();
   }catch(e){
@@ -479,20 +481,26 @@ function extractBonusRows(words){
     if(r && (w.top-r.top)<thresh){ r.items.push(w); }
     else rows.push({top:w.top, items:[w]});
   });
-  return rows.map(r=>{
-    const it=r.items.sort((a,b)=>a.left-b.left);
+  return rows.filter(r=>{
+    /* 加成行特征：至少两个数字，且最右侧的词带 %（敌方位）。
+       用于排除英雄等级（12.0/10.0/7.1）、兵力等杂行，防止错位 */
+    if(r.items.length<2) return false;
+    const it2=r.items.slice().sort((a,b)=>a.left-b.left);
+    return /%\s*$/.test(it2[it2.length-1].text);
+  }).map(r=>{
+    const it=r.items.slice().sort((a,b)=>a.left-b.left);
     let left=null, right=null;
     for(const w of it){ const v=finiteNum(w.text); if(v!=null){ left=v; break; } }
     for(let i=it.length-1;i>=0;i--){ const v=finiteNum(it[i].text); if(v!=null){ right=v; break; } }
     return {left, right};
-  });
+  }).filter(r=>r.left!=null);
 }
 /* 自动填入：按战报固定行序映射（盾→矛→射手 × 攻/防/穿/生命） */
 function autoFillFromTsv(tsv){
   const rows=extractBonusRows(parseTsvWords(tsv));
-  const n=Math.min(rows.length, FIELD_ORDER.length);
-  if(!n) return 0;
-  for(let i=0;i<n;i++){
+  /* 硬校验：必须恰好识别出 12 行加成才自动填，防止错位 */
+  if(rows.length!==FIELD_ORDER.length) return {filled:0, found:rows.length};
+  for(let i=0;i<rows.length;i++){
     const [tr,f]=FIELD_ORDER[i];
     if(rows[i].left!=null) state.sides.self[tr][f]=String(rows[i].left);
     if(state.mode==='compare' && rows[i].right!=null) state.sides.enemy[tr][f]=String(rows[i].right);
@@ -508,7 +516,7 @@ function autoFillFromTsv(tsv){
   const sides=state.mode==='self'?['self']:[state.activeSide];
   sides.forEach(s=>TROOPS.forEach(tr=>updateResult(s,tr.key)));
   renderOverview();
-  return n;
+  return {filled:rows.length, found:rows.length};
 }
 
 /* ---- 数字点选（兜底，识别错位时可手动点填） ---- */
