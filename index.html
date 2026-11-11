@@ -69,6 +69,16 @@
 
   .section-label{font-size:12px; color:var(--muted); margin:14px 0 8px; letter-spacing:1px;}
 
+  /* 可展开明细 */
+  details{margin-top:12px; border-top:1px dashed var(--line); padding-top:4px;}
+  summary{
+    color:var(--ice2); font-size:13px; cursor:pointer; padding:8px 0; user-select:none;
+    list-style:none; text-align:center;
+  }
+  summary::-webkit-details-marker{display:none;}
+  summary::before{content:'▸ ';}
+  details[open] summary::before{content:'▾ ';}
+
   /* 结果 */
   .result-row{display:flex; justify-content:space-between; align-items:center; padding:9px 2px; border-bottom:1px dashed var(--line);}
   .result-row:last-child{border-bottom:none;}
@@ -78,8 +88,8 @@
   .advice{margin-top:10px; padding:10px 12px; border-radius:10px; background:var(--card2); font-size:13px; line-height:1.6;}
   .advice .good{color:var(--good);} .advice .warn{color:var(--warn);}
   .vs-badge{font-size:12px; padding:2px 8px; border-radius:6px; margin-left:6px;}
-  .vs-win{background:rgba(77,208,160,.2); color:var(--good);}
-  .vs-lose{background:rgba(255,107,107,.2); color:var(--pen);}
+  .vs-self{background:rgba(56,189,248,.2); color:var(--ice2);}
+  .vs-enemy{background:rgba(255,107,107,.2); color:var(--pen);}
 
   /* 总览 */
   .overview{background:linear-gradient(160deg,#132c4d,#0e1c32); border:1px solid var(--ice); border-radius:16px; padding:16px; margin-top:16px;}
@@ -119,7 +129,7 @@
     <p>攻击 × 穿透 ｜ 防御 × 生命 ｜ 均衡短板</p>
   </div>
   <button class="entry" onclick="openTool('self')">
-    <b>分析自己</b><span>只填我方属性，看进攻/防守值与短板</span>
+    <b>分析自己</b><span>传战报截图自动填加成，看增益与短板</span>
   </button>
   <button class="entry" onclick="openTool('compare')">
     <b>双方对比</b><span>我方 vs 敌方，找出差距在哪一项</span>
@@ -134,12 +144,12 @@
   </div>
 
   <div class="card ocr-zone">
-    <h3>📄 战报截图识别（可选）</h3>
-    <div class="drop" onclick="document.getElementById('file').click()">点击上传战报截图，识别数字后点选填入</div>
+    <h3>📄 战报截图识别（自动填入加成）</h3>
+    <div class="drop" onclick="document.getElementById('file').click()">点击上传战报「属性加成」页截图，识别后自动填入左右两列加成</div>
     <input type="file" id="file" accept="image/*" class="hidden" onchange="onFile(this)">
     <img id="preview">
     <div class="ocr-actions">
-      <button class="btn primary" id="ocrBtn" onclick="runOCR()" disabled>识别文字</button>
+      <button class="btn primary" id="ocrBtn" onclick="runOCR()" disabled>识别并填入</button>
       <button class="btn" onclick="clearOCR()">清除图片</button>
     </div>
     <div class="progress" id="progWrap"><div id="prog"></div></div>
@@ -164,7 +174,7 @@
 const TROOPS = [
   {key:'shield', name:'盾兵', cls:'tag-shield', tag:'盾'},
   {key:'spear',  name:'矛兵', cls:'tag-spear',  tag:'矛'},
-  {key:'bow',    name:'弓兵', cls:'tag-bow',    tag:'弓'},
+  {key:'bow',    name:'射手', cls:'tag-bow',    tag:'射'},
 ];
 const FIELDS = [
   {key:'attack', label:'攻击', cls:'c-atk', hint:'A'},
@@ -172,11 +182,18 @@ const FIELDS = [
   {key:'def',    label:'防御', cls:'c-def', hint:'C'},
   {key:'hp',     label:'生命', cls:'c-hp',  hint:'D'},
 ];
+/* 加成显示顺序与战报行序一致：攻击、防御、穿透、生命 */
 const BONUS = [
   {key:'atkBonus', label:'攻击加成%'},
-  {key:'penBonus', label:'穿透加成%'},
   {key:'defBonus', label:'防御加成%'},
+  {key:'penBonus', label:'穿透加成%'},
   {key:'hpBonus',  label:'生命加成%'},
+];
+/* 战报「属性加成」页的固定行序，用于自动填入映射 */
+const FIELD_ORDER = [
+  ['shield','atkBonus'],['shield','defBonus'],['shield','penBonus'],['shield','hpBonus'],
+  ['spear','atkBonus'], ['spear','defBonus'], ['spear','penBonus'], ['spear','hpBonus'],
+  ['bow','atkBonus'],   ['bow','defBonus'],   ['bow','penBonus'],   ['bow','hpBonus'],
 ];
 
 const SAVE_KEY = 'wjdr_analyzer_v1';
@@ -193,7 +210,8 @@ let activeInput = null;
 /* ============ 工具函数 ============ */
 function num(v){ const n=parseFloat(v); return isNaN(n)?0:n; }
 function fmt(v){ return Number(v).toLocaleString('zh-CN',{maximumFractionDigits:0}); }
-function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1800); }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2200); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function load(){
   try{ const s=localStorage.getItem(SAVE_KEY); if(s){ const p=JSON.parse(s); if(p&&p.sides) state=p; } }catch(e){}
@@ -204,8 +222,8 @@ function save(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(state)); }ca
 function calcTroop(t){
   const A=num(t.attack), B=num(t.pen), C=num(t.def), D=num(t.hp);
   const ab=num(t.atkBonus), pb=num(t.penBonus), db=num(t.defBonus), hb=num(t.hpBonus);
-  const atkGain = (1+ab/100)*(1+pb/100);   // 进攻增益
-  const defGain = (1+db/100)*(1+hb/100);   // 防守增益
+  const atkGain = (1+ab/100)*(1+pb/100);   // 进攻增益 =（1+攻击加成）（1+穿透加成）
+  const defGain = (1+db/100)*(1+hb/100);   // 防守增益 =（1+防御加成）（1+生命加成）
   const atkVal  = A*B*atkGain;             // 进攻值
   const defVal  = C*D*defGain;             // 防守值
   return {A,B,C,D,atkGain,defGain,atkVal,defVal};
@@ -254,22 +272,21 @@ function renderTroops(){
       const card=document.createElement('div'); card.className='card';
       let h = '<h3><span class="troop-tag '+tr.cls+'">'+tr.tag+'</span>'+tr.name;
       if(state.mode==='compare') h += '<span class="vs-badge vs-'+s+'">'+sideName(s)+'</span>';
-      h += '</h3><div class="grid">';
+      h += '</h3><div id="result-'+s+'-'+tr.key+'"></div>';
+      h += '<details><summary>基础属性与加成明细（点开填写 / 核对自动填入）</summary>';
+      h += '<div class="section-label" style="margin-top:4px;">基础属性（来自战报详情或属性面板）</div><div class="grid">';
       FIELDS.forEach(f=>{
         h += '<div class="field"><label class="'+f.cls+'">'+f.label+'（'+f.hint+'）</label>'+
              '<input type="number" inputmode="decimal" step="any" data-side="'+s+'" data-troop="'+tr.key+'" data-key="'+f.key+'" value="'+esc(data[f.key])+'"></div>';
       });
-      h += '</div><div class="section-label">加成（不带 %，如 25 表示 25%）</div><div class="grid">';
+      h += '</div><div class="section-label">加成 %（不带 % 号，如 2496.3 表示 +2496.3%）</div><div class="grid">';
       BONUS.forEach(b=>{
         h += '<div class="field"><label>'+b.label+'</label>'+
              '<input type="number" inputmode="decimal" step="any" data-side="'+s+'" data-troop="'+tr.key+'" data-key="'+b.key+'" value="'+esc(data[b.key])+'"></div>';
       });
-      h += '</div>';
+      h += '</div></details>';
       card.innerHTML=h;
       host.appendChild(card);
-      // 结果卡片紧跟本兵种
-      const res=document.createElement('div'); res.className='card'; res.id='result-'+s+'-'+tr.key;
-      host.appendChild(res);
     });
   });
   bindInputs();
@@ -280,14 +297,14 @@ function renderTroops(){
 function updateResult(s, tkey){
   const el=document.getElementById('result-'+s+'-'+tkey);
   if(!el) return;
-  const tr=TROOPS.find(x=>x.key===tkey);
   const r=calcTroop(state.sides[s][tkey]);
   el.innerHTML =
-    '<h3>'+tr.name+' · 结果</h3>'+
-    '<div class="result-row"><span class="k">进攻增益</span><span class="v ice">× '+r.atkGain.toFixed(3)+'</span></div>'+
-    '<div class="result-row"><span class="k">防守增益</span><span class="v ice">× '+r.defGain.toFixed(3)+'</span></div>'+
-    '<div class="result-row"><span class="k">进攻值（A×B×增益）</span><span class="v atk">'+fmt(r.atkVal)+'</span></div>'+
-    '<div class="result-row"><span class="k">防守值（C×D×增益）</span><span class="v def">'+fmt(r.defVal)+'</span></div>'+
+    '<div class="big" style="margin-bottom:8px;">'+
+      '<div class="box"><div class="k" style="color:var(--muted);font-size:12px;">进攻增益</div><div class="num" style="color:var(--atk);">× '+r.atkGain.toFixed(2)+'</div></div>'+
+      '<div class="box"><div class="k" style="color:var(--muted);font-size:12px;">防守增益</div><div class="num" style="color:var(--def);">× '+r.defGain.toFixed(2)+'</div></div>'+
+    '</div>'+
+    '<div class="result-row"><span class="k">进攻值（A×B×进攻增益）</span><span class="v atk">'+fmt(r.atkVal)+'</span></div>'+
+    '<div class="result-row"><span class="k">防守值（C×D×防守增益）</span><span class="v def">'+fmt(r.defVal)+'</span></div>'+
     '<div class="advice">'+balance(r.A,r.B,'攻击','穿透')+'<br>'+balance(r.C,r.D,'防御','生命')+'</div>';
 }
 
@@ -364,7 +381,6 @@ function resetAll(){
 
 /* ============ OCR ============ */
 let ocrFile=null, ocrText='';
-function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function onFile(input){
   const f=input.files[0]; if(!f) return;
@@ -372,7 +388,7 @@ function onFile(input){
   const img=document.getElementById('preview');
   img.src=URL.createObjectURL(f); img.style.display='block';
   document.getElementById('ocrBtn').disabled=false;
-  document.getElementById('ocrHint').textContent='已载入，点击「识别文字」开始';
+  document.getElementById('ocrHint').textContent='已载入，点击「识别并填入」开始（首次需下载语言包，之后有缓存）';
   document.getElementById('chips').innerHTML='';
 }
 
@@ -399,7 +415,7 @@ async function runOCR(){
     'initializing tesseract':'初始化引擎',
     'loading language traineddata':'下载语言包（约11MB，仅首次，之后有缓存）',
     'initializing api':'准备识别',
-    'recognizing text':'识别数字中'
+    'recognizing text':'识别加成数字中'
   };
   let worker=null;
   try{
@@ -413,19 +429,89 @@ async function runOCR(){
       },
       errorHandler:e=>{ hint.textContent='引擎警告：'+(e.message||e); }
     });
-    const {data}=await worker.recognize(ocrFile);
+    const {data}=await worker.recognize(ocrFile, {}, {text:true, tsv:true});
     ocrText=data.text||'';
     prog.style.width='100%';
-    hint.textContent='识别完成（数字模式）。先点一个输入框，再点下方数字填入。';
+    const filled=autoFillFromTsv(data.tsv);
+    if(filled>0){
+      hint.textContent='识别完成，已自动填入 '+filled+'/12 项加成'+(filled<12?'（缺的手动补一下）':'')+'。明细已展开，请核对数字是否识别正确。';
+    }else{
+      hint.textContent='识别完成，但未识别到加成数字。可点下方数字填入，或展开明细手动填写。';
+    }
     renderChips();
   }catch(e){
     hint.textContent='识别失败：'+(e.message||e)+'。可手动填写；如反复失败，请用系统浏览器（Chrome/Safari）打开本页再试。';
   }finally{
     if(worker){ try{ await worker.terminate(); }catch(e){} }
-    btn.disabled=false; btn.textContent='识别文字';
+    btn.disabled=false; btn.textContent='识别并填入';
   }
 }
 
+/* ---- TSV 解析：提取每个词及其位置，按行聚类，左列=我方、右列=敌方 ---- */
+function parseTsvWords(tsv){
+  const out=[];
+  String(tsv||'').split(/\r?\n/).forEach(line=>{
+    const c=line.split('\t');
+    if(c.length>=12 && c[0]==='5'){
+      const text=(c[11]||'').trim();
+      if(text) out.push({left:+c[6]||0, top:+c[7]||0, h:+c[9]||0, text});
+    }
+  });
+  return out;
+}
+/* 加成数字特征：带小数点或带 %（用于排除兵力等纯整数） */
+function isBonusNum(t){
+  return /^\+?[\d,]+\.\d+%?$/.test(t) || /^\+?[\d,]+%$/.test(t);
+}
+function finiteNum(t){
+  const v=parseFloat(String(t).replace(/[+,%\s]/g,''));
+  return isFinite(v)?v:null;
+}
+function extractBonusRows(words){
+  const nums=words.filter(w=>isBonusNum(w.text));
+  if(!nums.length) return [];
+  const hs=nums.map(w=>w.h).sort((a,b)=>a-b);
+  const mh=hs[Math.floor(hs.length/2)]||20;
+  const thresh=Math.max(8, mh*0.6);
+  const rows=[];
+  nums.slice().sort((a,b)=>a.top-b.top).forEach(w=>{
+    const r=rows[rows.length-1];
+    if(r && (w.top-r.top)<thresh){ r.items.push(w); }
+    else rows.push({top:w.top, items:[w]});
+  });
+  return rows.map(r=>{
+    const it=r.items.sort((a,b)=>a.left-b.left);
+    let left=null, right=null;
+    for(const w of it){ const v=finiteNum(w.text); if(v!=null){ left=v; break; } }
+    for(let i=it.length-1;i>=0;i--){ const v=finiteNum(it[i].text); if(v!=null){ right=v; break; } }
+    return {left, right};
+  });
+}
+/* 自动填入：按战报固定行序映射（盾→矛→射手 × 攻/防/穿/生命） */
+function autoFillFromTsv(tsv){
+  const rows=extractBonusRows(parseTsvWords(tsv));
+  const n=Math.min(rows.length, FIELD_ORDER.length);
+  if(!n) return 0;
+  for(let i=0;i<n;i++){
+    const [tr,f]=FIELD_ORDER[i];
+    if(rows[i].left!=null) state.sides.self[tr][f]=String(rows[i].left);
+    if(state.mode==='compare' && rows[i].right!=null) state.sides.enemy[tr][f]=String(rows[i].right);
+  }
+  save();
+  /* 同步当前已渲染的输入框（对比模式敌方输入在切换标签后渲染） */
+  document.querySelectorAll('#troops input').forEach(inp=>{
+    inp.value=state.sides[inp.dataset.side][inp.dataset.troop][inp.dataset.key];
+  });
+  /* 展开明细便于核对 */
+  document.querySelectorAll('#troops details').forEach(d=>d.open=true);
+  /* 刷新结果 */
+  const sides=state.mode==='self'?['self']:[state.activeSide];
+  sides.forEach(s=>TROOPS.forEach(tr=>updateResult(s,tr.key)));
+  renderOverview();
+  return n;
+}
+
+/* ---- 数字点选（兜底，识别错位时可手动点填） ---- */
 function extractNumbers(text){
   const out=[]; const re=/(\d[\d,]*\.?\d*)\s*(%)?/g; let m;
   while((m=re.exec(text))!==null){
@@ -438,8 +524,8 @@ function extractNumbers(text){
 function renderChips(){
   const host=document.getElementById('chips'); host.innerHTML='';
   const nums=extractNumbers(ocrText);
-  if(!nums.length){ host.innerHTML='<span style="color:var(--muted);font-size:13px;">未识别到数字，可手动填写输入框</span>'; return; }
-  nums.forEach((n,i)=>{
+  if(!nums.length){ host.innerHTML='<span style="color:var(--muted);font-size:13px;">未识别到数字，可展开明细手动填写</span>'; return; }
+  nums.forEach(n=>{
     const c=document.createElement('span'); c.className='chip';
     c.textContent=n.value+(n.pct?'%':'');
     c.onclick=()=>{
